@@ -216,8 +216,10 @@ class ParseHandler(object):
         }
         self.one_time_attributes = {}
         self.in_para = False
+        self.one_liner = None
         self.people_seen = {}
         self.people_types_seen = {}
+        self.people_contexts = {}
         self.date = document.meta['date']
         (self.parliament, self.session) = (document.meta['parliament'], document.meta['session'])
         
@@ -263,9 +265,12 @@ class ParseHandler(object):
         
     def _new_person(self, hoc_id, description, affil_type=None):
         """Someone new has started speaking; save their information."""
-        if self.current_statement:
-            self.close_statement()
         description = description.strip()
+        if self.current_statement:
+            if ((hoc_id and hoc_id == self.current_statement.meta.get('person_id'))
+              or ((not hoc_id) and description == self.current_statement.meta.get('person_attribution'))):
+                return False
+            self.close_statement()
         self.one_time_attributes['person_attribution'] = description
         if hoc_id:
             self.one_time_attributes['person_id'] = hoc_id
@@ -285,12 +290,20 @@ class ParseHandler(object):
         elif not affil_type and description in self.people_types_seen:
             self.one_time_attributes['person_type'] = self.people_types_seen[description]
             
+        context_match = re.search(r'\s?\((.+)\)\s*$', description)
+        if context_match:
+            self.one_time_attributes['person_context'] = context_match.group(1)
+        elif description in self.people_contexts:
+            self.one_time_attributes['person_context'] = self.people_contexts[description]
+            
         for key in (description, re.sub(r'\s*\(.+\)\s*', '', description)):
             # Save backreferences in case we later lack extra data
             if hoc_id:
                 self.people_seen[key] = hoc_id
             if self.one_time_attributes.get('person_type'):
                 self.people_types_seen[key] = self.one_time_attributes['person_type']
+            if self.one_time_attributes.get('person_context'):
+                self.people_contexts[key] = self.one_time_attributes['person_context']
                 
     def _is_person(self):
         """Do we know who's speaking the current text?"""
@@ -311,32 +324,46 @@ class ParseHandler(object):
                     self.date, _get_housemet_time(match.group('number'), match.group('ampm')))
                 return NO_DESCEND
             
+            sub = list(el)
+            
             # If the paragraph is immediately followed by a B or Affiliation tag,
             # that usually means it's actually something being said by someone else    
-            if not mytext:
-                sub = list(el)
-                if (sub and sub[0].tag in ('B', 'Affiliation') and sub[0].text and 
-                (_n2s(sub[0].tail).strip() or sub[0].getnext() is not None)
-                    # it's a B or Affiliation tag, which has stuff both within it and directly after
-                  and (sub[0].text.strip().endswith(':') 
-                    or sub[0].tail.strip().startswith(':')
-                    # there's a colon
-                    or el.get('Interjection')
-                    # or the paragraph is tagged as an interjection
-                    or _r_honorific.search(sub[0].text.strip()))
-                    # or it looks like it starts with a title
-                  and sub[0].text.strip()[0].isupper()):
-                    # It looks like a new speaker
-                    if sub[0].tag == 'Affiliation':
-                        hoc_id = sub[0].get('DbId')
-                    else:
-                        hoc_id = None
-                    self._new_person(hoc_id, sub[0].text.replace(':', '').strip())
-                    if not sub[0].text.endswith(':') and sub[0].tail[0] == ':':
-                        # If the colon is on the wrong side of the B, stop it from
-                        # showing up in the paragraph text
-                        sub[0].tail = sub[0].tail[1:]
-                    sub[0].set('alpheus_skip_text', 'true')
+            if ((not mytext) and sub and sub[0].tag in ('B', 'Affiliation') and sub[0].text and 
+            (_n2s(sub[0].tail).strip() or sub[0].getnext() is not None)
+                # it's a B or Affiliation tag, which has stuff both within it and directly after
+              and (sub[0].text.strip().endswith(':') 
+                or sub[0].tail.strip().startswith(':')
+                # there's a colon
+                or el.get('Interjection')
+                # or the paragraph is tagged as an interjection
+                or _r_honorific.search(sub[0].text.strip()))
+                # or it looks like it starts with a title
+              and sub[0].text.strip()[0].isupper()):
+                # MONSTER IF COMPLETE. It looks like a new speaker.
+                if sub[0].tag == 'Affiliation':
+                    hoc_id = sub[0].get('DbId')
+                else:
+                    hoc_id = None
+                person_attribution = sub[0].text.replace(':', '').strip()
+                if (hoc_id != self.main_statement_speaker[0]
+                  and person_attribution != self.main_statement_speaker[1]):
+                  # If we're not switching back to the main speaker,
+                  # save a flag to switch back on the next line.
+                    self.one_liner = (True, el.getparent())
+                else:
+                    self.one_liner = None
+                self._new_person(hoc_id, sub[0].text.replace(':', '').strip())
+                if not sub[0].text.endswith(':') and sub[0].tail[0] == ':':
+                    # If the colon is on the wrong side of the B, stop it from
+                    # showing up in the paragraph text
+                    sub[0].tail = sub[0].tail[1:]
+                sub[0].set('alpheus_skip_text', 'true')
+            elif self.one_liner:
+                # The last paragraph was a quick interjection -- switch back
+                # to the previous speaker if one wasn't labelled
+                if self.one_liner[1] == el.getparent():
+                    self._new_person(self.main_statement_speaker[0], self.main_statement_speaker[1])
+                self.one_liner = None
                 
             self.in_para = True
             
@@ -352,6 +379,9 @@ class ParseHandler(object):
                 if nxt is not None and nxt.text:
                     # After a motion, there's an unnecessary "He said:" on the next phrase
                     nxt.text = re.sub(r'^\s*([S]?[hH]e said:|--)\s*', '', nxt.text)
+                    
+            if mytext.startswith('('):
+                procedural = True
                       
             p_attrs = {
                 'data-HoCid': el.get('id'),
@@ -415,6 +445,7 @@ class ParseHandler(object):
     def handle_PersonSpeaking(self, el, openclose):
         affil = el.xpath('Affiliation')[0]
         self._new_person(affil.get('DbId'), affil.text, affil.get('Type'))
+        self.main_statement_speaker = (affil.get('DbId'), affil.text, affil.get('Type'))
         return NO_DESCEND
         
     handle_Questioner = handle_PersonSpeaking
@@ -603,9 +634,9 @@ def parse_string(s):
     
 def fetch_and_parse(doc_id, lang):
     import urllib2
-    url = 'http://www.parl.gc.ca/HousePublications/Publication.aspx?DocId=%s&Language=%s&Mode=1&xml=true'
-    resp = urllib2.urlopen(
-        % (doc_id, lang[0].upper()))
+    url = 'http://www.parl.gc.ca/HousePublications/Publication.aspx?DocId=%s&Language=%s&Mode=1&xml=true' % (
+        doc_id, lang[0].upper())
+    resp = urllib2.urlopen(url)
     doc = parse_file(resp)
     doc.meta['HoCid'] = int(doc_id)
     doc.meta['xml_url'] = url
