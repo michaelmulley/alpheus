@@ -24,7 +24,7 @@ def _build_tag(name, attrs):
         u''.join([u" %s=%s" % (k, quoteattr(unicode(v))) for k,v in sorted(attrs.items())])
     )
 
-_r_whitespace = re.compile(r'\s\s+', re.UNICODE)
+_r_whitespace = re.compile(r'\s+', re.UNICODE)
 def _tame_whitespace(s):
     return _r_whitespace.sub(' ', s).strip()
     
@@ -48,7 +48,10 @@ def _only_open(target):
     return inner
 
 _r_housemet = re.compile(ur'^\s*(?P<text>The\s+House\s+met\s+at|La\s+séance\s+est\s+ouverte\s+à)\s+(?P<number>\d[\d:\.]*)\s*(?P<ampm>[ap]\.m\.|)', re.I | re.UNICODE)
-_r_honorific = re.compile(ur'^(Mr\.?\s|Mrs\.?\s|Ms\.?\s|Miss\.?s\|Hon\.?\s|Right\sHon\.\s|The\sSpeaker|Le\sprésident|The\sChair|The\sDeputy|The\sActing|An\s[hH]on\.?\s|Une\svoix|Des\svoix|Some\s[hH]on\.\s|M\.\s|Acting\s|L.hon\.\s|Le\strès\s|Assistant\s|Mme\.?\s|Mlle\.?\s)', re.UNICODE)
+_r_person_label = re.compile(ur'^(Mr\.?\s|Mrs\.?\s|Ms\.?\s|Miss\.?s\|Hon\.?\s|Right\sHon\.\s|The\sSpeaker|Le\sprésident|The\sChair|The\sDeputy|The\sActing|An\s[hH]on\.?\s|Une\svoix|Des\svoix|Some\s[hH]on\.\s|M\.\s|Acting\s|L.hon\.?\s|Le\strès\s|Assistant\s|Mme\.?\s|Mlle\.?\s)', re.UNICODE)
+_r_honorific = re.compile(ur'^(Mr\.?\s|Mrs\.?\s|Ms\.?\s|Miss\.?s\|Hon\.?\s|Right\sHon\.\s|M\.\s|L.hon\.?\s|Mme\.?\s|Mlle\.?\s)', re.UNICODE)
+_r_parens = re.compile(r'\s*\(.+\)\s*')
+_r_indeterminate = re.compile(r'^(An?|Une)\s')
 def _get_housemet_time(number, ampm):
     ampm = _n2s(ampm).replace('.', '')
     number = number.replace('.', ':')
@@ -76,6 +79,9 @@ def _time_to_datetime(hour, minute, date):
             date + datetime.timedelta(days=hour//24),
             datetime.time(hour=hour % 24, minute=minute)
         )
+        
+def _strip_person_name(n):
+    return _r_honorific.sub('', _r_parens.sub('', _tame_whitespace(n))).strip()
         
 class AlpheusError(Exception):
     pass
@@ -265,19 +271,25 @@ class ParseHandler(object):
         
     def _new_person(self, hoc_id, description, affil_type=None):
         """Someone new has started speaking; save their information."""
-        description = description.strip()
+        description = _tame_whitespace(description)
+        stripped_description = _strip_person_name(description)
         if self.current_statement:
+            # If this "new person" is the same as the last person,
+            # don't start a new statement
             if ((hoc_id and hoc_id == self.current_statement.meta.get('person_id'))
-              or ((not hoc_id) and description == self.current_statement.meta.get('person_attribution'))):
-                return False
+              or ((not hoc_id) and 
+              stripped_description == _strip_person_name(self.current_statement.meta.get('person_attribution')))):
+                if not _r_indeterminate.search(description):
+                    # (Though if it's "An hon. member", two in a row *can* be different people.)
+                    return False
             self.close_statement()
         self.one_time_attributes['person_attribution'] = description
         if hoc_id:
             self.one_time_attributes['person_id'] = hoc_id
         else:
             # If we don't have an ID, see if we previously got one for this person
-            if description in self.people_seen:
-                self.one_time_attributes['person_id'] = self.people_seen[description]
+            if stripped_description in self.people_seen:
+                self.one_time_attributes['person_id'] = self.people_seen[stripped_description]
         
         # The "Affiliation Type" field is so far mysterious -- it has scores of
         # different values in use -- but I've made guesses at a few values
@@ -287,16 +299,16 @@ class ParseHandler(object):
             self.one_time_attributes['person_type'] = 'clerk'
         elif affil_type == '26':
             self.one_time_attributes['person_type'] = 'analyst'
-        elif not affil_type and description in self.people_types_seen:
-            self.one_time_attributes['person_type'] = self.people_types_seen[description]
+        elif not affil_type and stripped_description in self.people_types_seen:
+            self.one_time_attributes['person_type'] = self.people_types_seen[stripped_description]
             
         context_match = re.search(r'\s?\((.+)\)\s*$', description)
         if context_match:
             self.one_time_attributes['person_context'] = context_match.group(1)
-        elif description in self.people_contexts:
-            self.one_time_attributes['person_context'] = self.people_contexts[description]
+        elif stripped_description in self.people_contexts:
+            self.one_time_attributes['person_context'] = self.people_contexts[stripped_description]
             
-        for key in (description, re.sub(r'\s*\(.+\)\s*', '', description)):
+        for key in (description, stripped_description):
             # Save backreferences in case we later lack extra data
             if hoc_id:
                 self.people_seen[key] = hoc_id
@@ -336,7 +348,7 @@ class ParseHandler(object):
                 # there's a colon
                 or el.get('Interjection')
                 # or the paragraph is tagged as an interjection
-                or _r_honorific.search(sub[0].text.strip()))
+                or _r_person_label.search(sub[0].text.strip()))
                 # or it looks like it starts with a title
               and sub[0].text.strip()[0].isupper()):
                 # MONSTER IF COMPLETE. It looks like a new speaker.
@@ -344,7 +356,7 @@ class ParseHandler(object):
                     hoc_id = sub[0].get('DbId')
                 else:
                     hoc_id = None
-                person_attribution = sub[0].text.replace(':', '').strip()
+                person_attribution = _tame_whitespace(sub[0].text.replace(':', ''))
                 if (hoc_id != self.main_statement_speaker[0]
                   and person_attribution != self.main_statement_speaker[1]):
                   # If we're not switching back to the main speaker,
@@ -384,7 +396,7 @@ class ParseHandler(object):
                 procedural = True
                       
             p_attrs = {
-                'data-HoCid': el.get('id'),
+                'data-HoCid': el.get('id', '0')
             }
             if procedural:
                 p_attrs['class'] = 'procedural'
@@ -469,8 +481,9 @@ class ParseHandler(object):
     
     @_only_open
     def handle_Timestamp(self, el, openclose):
-        self.current_attributes['timestamp'] = _time_to_datetime(
-            hour=int(el.get('Hr')), minute=int(el.get('Mn')), date=self.date)
+        if el.get('Hr'):
+            self.current_attributes['timestamp'] = _time_to_datetime(
+                hour=int(el.get('Hr')), minute=int(el.get('Mn', 0)), date=self.date)
         return NO_DESCEND
         
     def handle_SubjectOfBusinessQualifier(self, el, openclose):
@@ -657,15 +670,23 @@ def main():
     group = optparse.OptionGroup(optparser, "Debugging Options")
     group.add_option("--print-names", dest="print_names", action="store_true",
         help="Instead of outputting HTML, print a list of names of people speaking.")
+    group.add_option("--pdb", dest="pdb", action="store_true",
+        help="Drop into the Python debugger on exception")
     optparser.add_option_group(group)
     
     (options, args) = optparser.parse_args()
-    if options.filename:
-        document = parse_file(open(options.filename))
-    elif options.docid:
-        document = fetch_and_parse(options.docid, options.language[0].upper())
-    else:
-        document = parse_file(sys.stdin)
+    try:
+        if options.filename:
+            document = parse_file(open(options.filename))
+        elif options.docid:
+            document = fetch_and_parse(options.docid, options.language[0].upper())
+        else:
+            document = parse_file(sys.stdin)
+    except Exception as e:
+        if options.pdb:
+            import pdb; pdb.post_mortem()
+        else:
+            raise
     #sys.stderr.write("Parsed %d statements\n" % len(document.statements))
     if options.print_names:
         for s in document.statements:
