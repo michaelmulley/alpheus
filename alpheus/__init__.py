@@ -12,6 +12,7 @@ import lxml.html
 
 import logging
 logger = logging.getLogger(__name__)
+logger.addHandler(logging.StreamHandler())
 
 __all__ = ['parse_file', 'parse_string', 'fetch_and_parse']
 
@@ -48,8 +49,8 @@ def _only_open(target):
     return inner
 
 _r_housemet = re.compile(ur'^\s*(?P<text>The\s+House\s+met\s+at|La\s+séance\s+est\s+ouverte\s+à)\s+(?P<number>\d[\d:\.]*)\s*(?P<ampm>[ap]\.m\.|)', re.I | re.UNICODE)
-_r_person_label = re.compile(ur'^(Mr\.?\s|Mrs\.?\s|Ms\.?\s|Miss\.?s\|Hon\.?\s|Right\sHon\.\s|The\sSpeaker|Le\sprésident|The\sChair|The\sDeputy|The\sActing|An\s[hH]on\.?\s|Une\svoix|Des\svoix|Some\s[hH]on\.\s|M\.\s|Acting\s|L.hon\.?\s|Le\strès\s|Assistant\s|Mme\.?\s|Mlle\.?\s)', re.UNICODE)
-_r_honorific = re.compile(ur'^(Mr\.?\s|Mrs\.?\s|Ms\.?\s|Miss\.?s\|Hon\.?\s|Right\sHon\.\s|M\.\s|L.hon\.?\s|Mme\.?\s|Mlle\.?\s)', re.UNICODE)
+_r_person_label = re.compile(ur'^(Mr\.?\s|Mrs\.?\s|Ms\.?\s|Miss\.?s\|Hon\.?\s|Right\sHon\.\s|The\sSpeaker|Le\sprésident|The\sChair|The\sDeputy|The\sActing|An\s[hH]on\.?\s|Une\svoix|Des\svoix|Some\s[hH]on\.\s|M\.\s|Acting\s|L.hon\.?\s|Le\strès\s|Assistant\s|Mme\.?\s|Mlle\.?\s|Dr\.?\s)', re.UNICODE)
+_r_honorific = re.compile(ur'^(Mr\.?\s|Mrs\.?\s|Ms\.?\s|Miss\.?\s|Hon\.?\s|Right\sHon\.\s|M\.\s|L.hon\.?\s|Mme\.?\s|Mlle\.?\s|Dr\.?\s)', re.UNICODE)
 _r_parens = re.compile(r'\s*\(.+\)\s*')
 _r_indeterminate = re.compile(r'^(An?|Une)\s')
 def _get_housemet_time(number, ampm):
@@ -209,7 +210,7 @@ class ParseHandler(object):
                     'SubjectOfBusinessContent', 'Content', 'HansardBody',
                     'Intro', 'Poetry', 'Query', 'Motion',
                     'MotionBody', 'CommitteeQuote', 'LegislationQuote',
-                    'Pause', 'StartPause', 'EndPause',
+                    'Pause', 'StartPause', 'EndPause', 'Date',
                     etree.ProcessingInstruction] + PASSTHROUGH_TAGS.keys()
 
         
@@ -258,6 +259,9 @@ class ParseHandler(object):
     def close_statement(self):
         """Whoever's currently speaking has stopped: finalize this Statement object."""
         if self.current_statement:
+            if not self.current_statement.meta.get('has_non_procedural'):
+                for key in ('person_attribution', 'person_id', 'person_type'):
+                    self.current_statement.meta.pop(key, None)
             self.current_statement.clean_up_content()
             if not self.current_statement.content.strip():
                 raise AlpheusError("Trying to save a statement without content")
@@ -358,8 +362,10 @@ class ParseHandler(object):
                     hoc_id = None
                 person_attribution = _tame_whitespace(sub[0].text.replace(':', ''))
                 if (hoc_id != self.main_statement_speaker[0]
-                  and person_attribution != self.main_statement_speaker[1]):
+                  and (not self.main_statement_speaker[1].startswith(person_attribution))
+                  and not _r_honorific.search(person_attribution)):
                   # If we're not switching back to the main speaker,
+                  # and this is an interjection from a generic role -- e.g. Des voix --
                   # save a flag to switch back on the next line.
                     self.one_liner = (True, el.getparent())
                 else:
@@ -392,16 +398,22 @@ class ParseHandler(object):
                     # After a motion, there's an unnecessary "He said:" on the next phrase
                     nxt.text = re.sub(r'^\s*([S]?[hH]e said:|--)\s*', '', nxt.text)
                     
-            if mytext.startswith('('):
+            if mytext and mytext[0] in ('(', '['):
                 procedural = True
                       
             p_attrs = {
                 'data-HoCid': el.get('id', '0')
             }
+
             if procedural:
                 p_attrs['class'] = 'procedural'
-            elif self.current_attributes.get('language'):
-                p_attrs['data-originallang'] = self.current_attributes['language']
+            else:
+                if self.current_statement:
+                    self.current_statement.meta['has_non_procedural'] = True
+                else:
+                    self.one_time_attributes['has_non_procedural'] = True
+                if self.current_attributes.get('language'):
+                    p_attrs['data-originallang'] = self.current_attributes['language']
             
             if el.xpath('.//QuotePara'):
                 self._add_code(u'<blockquote>')
@@ -458,6 +470,11 @@ class ParseHandler(object):
         affil = el.xpath('Affiliation')[0]
         self._new_person(affil.get('DbId'), affil.text, affil.get('Type'))
         self.main_statement_speaker = (affil.get('DbId'), affil.text, affil.get('Type'))
+        if affil.tail and affil.tail.replace(':', '').strip():
+            content = affil.tail.replace(':', '').strip()
+            if not content.startswith('('):
+                logger.warning(u"Looks like there's content in PersonSpeaking: %s" % content)
+                self._add_text(content)
         return NO_DESCEND
         
     handle_Questioner = handle_PersonSpeaking
