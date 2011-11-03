@@ -228,6 +228,7 @@ class ParseHandler(object):
         self.people_types_seen = {}
         self.people_contexts = {}
         self.date = document.meta['date']
+        self.main_statement_speaker = ['', '']
         (self.parliament, self.session) = (document.meta['parliament'], document.meta['session'])
         
     def _initialize_statement(self):
@@ -664,11 +665,18 @@ def parse_string(s):
     
 def fetch_and_parse(doc_id, lang):
     import urllib2
-    url = 'http://www.parl.gc.ca/HousePublications/Publication.aspx?DocId=%s&Language=%s&Mode=1&xml=true' % (
-        doc_id, lang[0].upper())
+    if doc_id == 'hansard':
+        url = 'http://parl.gc.ca/HousePublications/Publication.aspx?Pub=%s&Language=%s&Mode=1&xml=true' % (
+            doc_id, lang[0].upper())
+    else:
+        url = 'http://www.parl.gc.ca/HousePublications/Publication.aspx?DocId=%s&Language=%s&Mode=1&xml=true' % (
+            doc_id, lang[0].upper())
     resp = urllib2.urlopen(url)
     doc = parse_file(resp)
-    doc.meta['HoCid'] = int(doc_id)
+    try:
+        doc.meta['HoCid'] = int(doc_id)
+    except ValueError:
+        pass
     doc.meta['xml_url'] = url
     doc.meta['html_url'] = url.replace('&xml=true', '')
     return doc
