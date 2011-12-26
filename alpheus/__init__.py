@@ -353,7 +353,7 @@ class ParseHandler(object):
                 # there's a colon
                 or el.get('Interjection')
                 # or the paragraph is tagged as an interjection
-                or _r_person_label.search(sub[0].text.strip()))
+                or (_r_person_label.search(sub[0].text.strip()) and sub[0].tail.strip()[0].isupper()))
                 # or it looks like it starts with a title
               and sub[0].text.strip()[0].isupper()):
                 # MONSTER IF COMPLETE. It looks like a new speaker.
@@ -469,6 +469,9 @@ class ParseHandler(object):
     @_only_open
     def handle_PersonSpeaking(self, el, openclose):
         affil = el.xpath('Affiliation')[0]
+        if not affil.text:
+            logger.warning("Empty affiliation: %s" % etree.tostring(el))
+            return NO_DESCEND
         self._new_person(affil.get('DbId'), affil.text, affil.get('Type'))
         self.main_statement_speaker = (affil.get('DbId'), affil.text, affil.get('Type'))
         if affil.tail and affil.tail.replace(':', '').strip():
