@@ -27,13 +27,16 @@ def _build_tag(name, attrs):
 
 _r_whitespace = re.compile(r'\s+', re.UNICODE)
 def _tame_whitespace(s):
-    return _r_whitespace.sub(' ', s).strip()
+    return _r_whitespace.sub(' ', _n2s(s)).strip()
     
 def _text_content(el, tail=False):
     return _tame_whitespace(
         _n2s(el.text) + 
         u''.join([_text_content(subel, True) for subel in el]) + 
         (_n2s(el.tail) if tail else ''))
+        
+def _letters_only(s):
+    return re.sub('[^a-zA-Z]', '', _n2s(s).lower())
         
 def _smart_title(s):
     if s.isupper() or s.islower():
@@ -210,7 +213,7 @@ class ParseHandler(object):
                     'SubjectOfBusinessContent', 'Content', 'HansardBody',
                     'Intro', 'Poetry', 'Query', 'Motion',
                     'MotionBody', 'CommitteeQuote', 'LegislationQuote',
-                    'Pause', 'StartPause', 'EndPause', 'Date',
+                    'Pause', 'StartPause', 'EndPause', 'Date', 'Insertion',
                     etree.ProcessingInstruction] + PASSTHROUGH_TAGS.keys()
 
         
@@ -283,7 +286,7 @@ class ParseHandler(object):
             # don't start a new statement
             if ((hoc_id and hoc_id == self.current_statement.meta.get('person_id'))
               or ((not hoc_id) and 
-              stripped_description == _strip_person_name(self.current_statement.meta.get('person_attribution')))):
+              _letters_only(stripped_description) == _letters_only(_strip_person_name(self.current_statement.meta.get('person_attribution'))))):
                 if not _r_indeterminate.search(description):
                     # (Though if it's "An hon. member", two in a row *can* be different people.)
                     return False
@@ -363,7 +366,8 @@ class ParseHandler(object):
                     hoc_id = None
                 person_attribution = _tame_whitespace(sub[0].text.replace(':', ''))
                 if (hoc_id != self.main_statement_speaker[0]
-                  and (not self.main_statement_speaker[1].startswith(person_attribution))
+                  and (not _letters_only(self.main_statement_speaker[1]).startswith(
+                  _letters_only(person_attribution)))
                   and not _r_honorific.search(person_attribution)):
                   # If we're not switching back to the main speaker,
                   # and this is an interjection from a generic role -- e.g. Des voix --
@@ -554,7 +558,7 @@ class ParseHandler(object):
             self.close_statement()
         
     def handle_Affiliation(self, el, openclose):
-        if not el.get('alpheus_skip_text'):
+        if (not el.get('alpheus_skip_text')) and el.get('DbId'):
             if openclose == TAG_OPEN:
                 attrs = {
                     'href': 'http://www.parl.gc.ca/MembersOfParliament/ProfileMP.aspx?Key=%s&Language=%s' % (
@@ -568,16 +572,17 @@ class ParseHandler(object):
         self._add_tag_text(el, openclose)
             
     def handle_Document(self, el, openclose):
-        if openclose == TAG_OPEN:
-            attrs = {
-                'href': 'http://www.parl.gc.ca/LegisInfo/BillDetails.aspx?&Mode=1&billId=%s&Language=%s' % (
-                    el.get('DbId'), self.document_language[0].upper()),
-                'data-HoCid': el.get('DbId'),
-                'class': 'related_link legislation'
-            }
-            self._add_code(_build_tag('a', attrs))
-        else:
-            self._add_code('</a>')
+        if el.get('DbId'):
+            if openclose == TAG_OPEN:
+                attrs = {
+                    'href': 'http://www.parl.gc.ca/LegisInfo/BillDetails.aspx?&Mode=1&billId=%s&Language=%s' % (
+                        el.get('DbId'), self.document_language[0].upper()),
+                    'data-HoCid': el.get('DbId'),
+                    'class': 'related_link legislation'
+                }
+                self._add_code(_build_tag('a', attrs))
+            else:
+                self._add_code('</a>')
         self._add_tag_text(el, openclose)
         
     def handle_Division(self, el, openclose):
