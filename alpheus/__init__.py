@@ -472,7 +472,11 @@ class ParseHandler(object):
     
     @_only_open
     def handle_PersonSpeaking(self, el, openclose):
-        affil = el.xpath('Affiliation')[0]
+        try:
+            affil = el.xpath('Affiliation')[0]
+        except IndexError:
+            logger.warning("No affiliation in PersonSpeaking: %s" % etree.tostring(el))
+            return NO_DESCEND
         if not affil.text:
             logger.warning("Empty affiliation: %s" % etree.tostring(el))
             return NO_DESCEND
