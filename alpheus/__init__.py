@@ -205,6 +205,9 @@ class ParseHandler(object):
         'I': 'em',
         'Sup': 'sup',
         'Sub': 'sub',
+        'table': 'table',
+        'row': 'tr',
+        'entry': 'td',
     }
     
     # We include the text contents of the tag. Tags in this list won't generate
@@ -214,6 +217,7 @@ class ParseHandler(object):
                     'Intro', 'Poetry', 'Query', 'Motion',
                     'MotionBody', 'CommitteeQuote', 'LegislationQuote',
                     'Pause', 'StartPause', 'EndPause', 'Date', 'Insertion',
+                    'colspec', 'tgroup', 'tbody',
                     etree.ProcessingInstruction] + PASSTHROUGH_TAGS.keys()
 
         
@@ -437,9 +441,10 @@ class ParseHandler(object):
         if el.get('TocType') == 'TPC':
             if openclose == TAG_OPEN:
                 # These are headings we've decided we're not interested in
-                self._add_code('<!-- ProceduralText ')
-                self._add_tag_text(el, openclose)
-                self._add_code(' -->')
+                pass
+                #self._add_code('<!-- ProceduralText ')
+                #self._add_tag_text(el, openclose)
+                #self._add_code(' -->')
         else:
             return self.handle_ParaText(el, openclose, procedural=True)
             
