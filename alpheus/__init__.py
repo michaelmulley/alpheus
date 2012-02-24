@@ -217,7 +217,7 @@ class ParseHandler(object):
                     'Intro', 'Poetry', 'Query', 'Motion',
                     'MotionBody', 'CommitteeQuote', 'LegislationQuote',
                     'Pause', 'StartPause', 'EndPause', 'Date', 'Insertion',
-                    'colspec', 'tgroup', 'tbody',
+                    'colspec', 'tgroup', 'tbody', 'thead', 'title',
                     etree.ProcessingInstruction] + PASSTHROUGH_TAGS.keys()
 
         
@@ -267,9 +267,9 @@ class ParseHandler(object):
     def close_statement(self):
         """Whoever's currently speaking has stopped: finalize this Statement object."""
         if self.current_statement:
-            if not self.current_statement.meta.get('has_non_procedural'):
-                for key in ('person_attribution', 'person_id', 'person_type'):
-                    self.current_statement.meta.pop(key, None)
+            #if not self.current_statement.meta.get('has_non_procedural'):
+            #    for key in ('person_attribution', 'person_id', 'person_type'):
+            #        self.current_statement.meta.pop(key, None)
             self.current_statement.clean_up_content()
             if not self.current_statement.content.strip():
                 raise AlpheusError("Trying to save a statement without content")
@@ -518,6 +518,10 @@ class ParseHandler(object):
         if el.get('Hr'):
             self.current_attributes['timestamp'] = _time_to_datetime(
                 hour=int(el.get('Hr')), minute=int(el.get('Mn', 0)), date=self.date)
+            if self.current_statement and not self.current_statement.meta.get('has_non_procedural'):
+                # If there's only been procedural text so far, make this timestamp apply to the current
+                # statement
+                self.current_statement.meta['timestamp'] = self.current_attributes['timestamp']
         return NO_DESCEND
         
     def handle_SubjectOfBusinessQualifier(self, el, openclose):
