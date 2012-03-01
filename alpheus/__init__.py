@@ -379,7 +379,7 @@ class ParseHandler(object):
                         or el.get('Interjection')
                         # or it looks like it starts with a title
                         or (_r_person_label.search(sub[0].text.strip()) and _following_char(sub[0]).isupper())
-                    ):
+                    )):
                 # MONSTER IF COMPLETE. It looks like a new speaker.
                 if sub[0].tag == 'Affiliation':
                     hoc_id = sub[0].get('DbId')
