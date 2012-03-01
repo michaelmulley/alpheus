@@ -362,15 +362,13 @@ class ParseHandler(object):
                 return NO_DESCEND
             
             sub = list(el)
-            
-            
-            
+
             # If the paragraph is immediately followed by a B or Affiliation tag,
             # that usually means it's actually something being said by someone else    
             if (
                     (not mytext)
                     and sub and sub[0].tag in ('B', 'Affiliation') and sub[0].text
-                    and sub[0].text.strip()[0].isupper())
+                    and sub[0].text.strip()[0].isupper()
                     and _following_char(sub[0])
                     # it's a B or Affiliation tag, which has stuff both within it and directly after
                     and (
