@@ -43,6 +43,19 @@ def _smart_title(s):
         return s.title()
     return s
     
+def _following_char(el):
+    """Returns the next non-whitespace character after this element,
+    without moving up the tree."""
+    tail = _n2s(el.tail).strip()
+    if tail:
+        return tail[0]
+    nxt = el.getnext()
+    if nxt is not None:
+        txt = _n2s(nxt.text).strip()
+        if txt:
+            return txt[0]
+    return ''
+    
 def _only_open(target):
     """Only execute the function if argument openclose == TAG_OPEN"""
     @wraps(target)
@@ -350,19 +363,25 @@ class ParseHandler(object):
             
             sub = list(el)
             
+            
+            
             # If the paragraph is immediately followed by a B or Affiliation tag,
             # that usually means it's actually something being said by someone else    
-            if ((not mytext) and sub and sub[0].tag in ('B', 'Affiliation') and sub[0].text and 
-            (_n2s(sub[0].tail).strip() or sub[0].getnext() is not None)
-                # it's a B or Affiliation tag, which has stuff both within it and directly after
-              and (sub[0].text.strip().endswith(':') 
-                or sub[0].tail.strip().startswith(':')
-                # there's a colon
-                or el.get('Interjection')
-                # or the paragraph is tagged as an interjection
-                or (_r_person_label.search(sub[0].text.strip()) and sub[0].tail.strip()[0].isupper()))
-                # or it looks like it starts with a title
-              and sub[0].text.strip()[0].isupper()):
+            if (
+                    (not mytext)
+                    and sub and sub[0].tag in ('B', 'Affiliation') and sub[0].text
+                    and sub[0].text.strip()[0].isupper())
+                    and _following_char(sub[0])
+                    # it's a B or Affiliation tag, which has stuff both within it and directly after
+                    and (
+                        # there's a colon
+                        sub[0].text.strip().endswith(':') 
+                        or _following_char(sub[0]) == ':'
+                        # or the paragraph is tagged as an interjection
+                        or el.get('Interjection')
+                        # or it looks like it starts with a title
+                        or (_r_person_label.search(sub[0].text.strip()) and _following_char(sub[0]).isupper())
+                    ):
                 # MONSTER IF COMPLETE. It looks like a new speaker.
                 if sub[0].tag == 'Affiliation':
                     hoc_id = sub[0].get('DbId')
