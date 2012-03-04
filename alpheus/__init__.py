@@ -696,9 +696,10 @@ def parse_tree(tree):
     return document
 
 def parse_file(fileobj):
-    return parse_tree(etree.parse(fileobj))
+    return parse_string(fileobj.read())
     
 def parse_string(s):
+    s = s.replace('<B />', '') # Empty bold tags can gum up the works
     return parse_tree(etree.fromstring(s))
     
 def fetch_and_parse(doc_id, lang):
