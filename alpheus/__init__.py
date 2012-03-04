@@ -18,11 +18,14 @@ __all__ = ['parse_file', 'parse_string', 'fetch_and_parse']
 
 def _n2s(o):
     return o if o is not None else ''
-    
+        
 def _build_tag(name, attrs):
     return u'<%s%s>' % (
         name,
-        u''.join([u" %s=%s" % (k, quoteattr(unicode(v))) for k,v in sorted(attrs.items())])
+        u''.join((
+            u" %s=%s" % (k, quoteattr(unicode(v)))
+            for k,v in sorted(attrs.items())
+        ))
     )
 
 _r_whitespace = re.compile(r'\s+', re.UNICODE)
@@ -699,7 +702,7 @@ def parse_file(fileobj):
     return parse_string(fileobj.read())
     
 def parse_string(s):
-    s = s.replace('<B />', '') # Empty bold tags can gum up the works
+    s = s.replace('<B />', '').replace('<ParaText />', '') # Some empty tags can gum up the works
     return parse_tree(etree.fromstring(s))
     
 def fetch_and_parse(doc_id, lang):
