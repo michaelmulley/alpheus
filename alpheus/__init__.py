@@ -112,27 +112,12 @@ class Document(object):
     <html lang="%(lang)s"><head>
     <meta charset="utf-8">
     <title>%(title)s</title>
-    <style type="text/css">
-    p {
-        max-width: 750px;
-        color: #111;
-    }
-    p.procedural {
-        color: #444;
-        font-style: italic;
-    }
-    div.statement:nth-child(even) {
-        background-color: #EEE;
-    }
-    div.statement {
-        padding: 10px 15px;
-        border-bottom: 1px dotted #CCC;
-    }
-    </style>
+    <link rel="stylesheet" type="text/css" href="http://rhymeswithcycle.github.com/alpheus/alpheus.css">
     </head>
     <body><h1>%(title)s</h1>
     <table>%(metadata_rows)s</table>
     %(statements)s
+    <script type="text/javascript" src="http://rhymeswithcycle.github.com/alpheus/alpheus.js"></script>
     </body></html>
     """
     
