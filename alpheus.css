@@ -1,0 +1,15 @@
+p {
+    max-width: 750px;
+    color: #111;
+}
+p.procedural {
+    color: #444;
+    font-style: italic;
+}
+div.statement:nth-child(even) {
+    background-color: #EEE;
+}
+div.statement {
+    padding: 10px 15px;
+    border-bottom: 1px dotted #CCC;
+}
