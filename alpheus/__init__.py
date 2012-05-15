@@ -511,8 +511,8 @@ class ParseHandler(object):
     
     @_only_open
     def handle_FloorLanguage(self, el, openclose):
-        lang = el.get('language').lower()
-        if lang == 'text':
+        lang = el.get('language', '').lower()
+        if lang == 'text' or not lang:
             self.current_attributes['language'] = None
         else:
             self.current_attributes['language'] = lang
@@ -522,7 +522,7 @@ class ParseHandler(object):
     def handle_Timestamp(self, el, openclose):
         if el.get('Hr'):
             self.current_attributes['timestamp'] = _time_to_datetime(
-                hour=int(el.get('Hr')), minute=int(el.get('Mn', 0)), date=self.date)
+                hour=int(el.get('Hr').replace(' ', '')), minute=int(el.get('Mn', 0)), date=self.date)
             if self.current_statement and not self.current_statement.meta.get('has_non_procedural'):
                 # If there's only been procedural text so far, make this timestamp apply to the current
                 # statement
