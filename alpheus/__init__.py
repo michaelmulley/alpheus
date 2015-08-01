@@ -665,7 +665,7 @@ def parse_tree(tree):
         document.meta['committee_name_fr'] = _get_meta('InstitutionDebateFr')
         #TODO: in camera
         
-    document.meta['document_number'] = _get_meta('Number').split(' ')[-1].lstrip('0')
+    document.meta['document_number'] = _get_meta('Number').split()[-1].lstrip('0')
     
     # Now we can move on to the content of the document
     handler = ParseHandler(document)
