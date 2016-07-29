@@ -688,6 +688,7 @@ def parse_file(fileobj):
     
 def parse_string(s):
     s = s.replace('<B />', '').replace('<ParaText />', '') # Some empty tags can gum up the works
+    s = s.replace('&ccedil;', '&#231;').replace('&ecaute;', '&#233;') # Fix invalid entities
     return parse_tree(etree.fromstring(s))
     
 def fetch_and_parse(doc_id, lang):
