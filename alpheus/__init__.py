@@ -355,7 +355,7 @@ class ParseHandler(object):
             # that usually means it's actually something being said by someone else    
             if (
                     (not mytext)
-                    and sub and sub[0].tag in ('B', 'Affiliation') and sub[0].text
+                    and sub and sub[0].tag in ('B', 'Affiliation') and sub[0].text and sub[0].text.strip()
                     and sub[0].text.strip()[0].isupper()
                     and _following_char(sub[0])
                     # it's a B or Affiliation tag, which has stuff both within it and directly after
@@ -688,7 +688,7 @@ def parse_file(fileobj):
     
 def parse_string(s):
     s = s.replace('<B />', '').replace('<ParaText />', '') # Some empty tags can gum up the works
-    s = s.replace('&ccedil;', '&#231;').replace('&ecaute;', '&#233;') # Fix invalid entities
+    s = s.replace('&ccedil;', '&#231;').replace('&eacute;', '&#233;') # Fix invalid entities
     return parse_tree(etree.fromstring(s))
     
 def fetch_and_parse(doc_id, lang):
