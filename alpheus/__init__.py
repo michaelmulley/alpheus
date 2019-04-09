@@ -512,10 +512,10 @@ class ParseHandler(object):
     @_only_open
     def handle_FloorLanguage(self, el, openclose):
         lang = el.get('language', '').lower()
-        if lang == 'text' or not lang:
-            self.current_attributes['language'] = None
-        else:
+        if lang in ('en', 'fr'):
             self.current_attributes['language'] = lang
+        else:
+            self.current_attributes['language'] = None
         return NO_DESCEND
     
     @_only_open
