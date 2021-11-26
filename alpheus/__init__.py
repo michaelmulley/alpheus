@@ -446,7 +446,7 @@ class ParseHandler(object):
         if el.get('TocType') == 'TPC':
             if openclose == TAG_OPEN:
                 # These are headings we've decided we're not interested in
-                pass
+                return NO_DESCEND
                 #self._add_code('<!-- ProceduralText ')
                 #self._add_tag_text(el, openclose)
                 #self._add_code(' -->')
