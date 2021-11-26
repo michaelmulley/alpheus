@@ -219,6 +219,7 @@ class ParseHandler(object):
                     'MotionBody', 'CommitteeQuote', 'LegislationQuote',
                     'Pause', 'StartPause', 'EndPause', 'Date', 'Insertion',
                     'colspec', 'tgroup', 'tbody', 'thead', 'title',
+                    'EditorsNotes',
                     etree.ProcessingInstruction] + PASSTHROUGH_TAGS.keys()
 
         
